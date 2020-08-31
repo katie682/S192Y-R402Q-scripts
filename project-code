@@ -108,4 +108,8 @@ names(all_logMAR_grouped)[5] <- "LR_mean"
 
 summary(all_logMAR_grouped)
 
+#Similar merge() and rbind() method used for logMAR for albinism, other eye problems and ethnicity
 
+install.packages("haven")
+library(haven)
+write_sav(all_logMAR_grouped, "all_logMAR_grouped.sav") #.sav file required for SPSS 25
