@@ -1,0 +1,26 @@
+#Use plink to extract relevant SNPs and their weighting https://www.cog-genomics.org/plink/1.9/data 
+#create snps file with the rs numbers (here called testsnps.txt)
+qsub -b y -V -cwd -N plinkchr11 -pe smp.pe 2 plink --chr 11 --bed XX.bed --bim XX.bim --fam XX.fam --recode A --out recodechr11.plinkOut.raw --extract testsnps.txt
+
+#use output file recodechr11.plinkOut.raw in command line
+awk '{ if (($7 == 2) && ($8 != 2)) { print } }' recodechr11.plinkOut.raw > hom602filter.txt
+awk '{ if (($8 == 2) && ($7 != 2)) { print } }' recodechr11.plinkOut.raw > hom809filter.txt
+awk '{ if (($7 == 2) && ($8 == 2)) { print } }' recodechr11.plinkOut.raw > doublehomsfilter.txt
+awk '{ if (($7 == 2) && ($8 == 2)) { print $2} }' recodechr11.plinkOut.raw > doublehomsIIDonly.txt #file with IDs of those with dble homs
+wc -l doublehomsIIDonly.txt #will show 136 IDs
+
+#heterozygous counts
+awk '{ if ($7 == 1) { print } }' recodechr11.plinkOut.raw > het602filter.txt #218194 individuals
+awk '{ if ($8 == 1) { print } }' recodechr11.plinkOut.raw > het809filter.txt #191523 individuals
+
+#phenotype file (ukbXXXXX.tab)
+awk '{ if ($1 == 2111251) { print $3931} }' ukb41483.tab #this confirms that eid = iid (ie .tab file has same anonymised IDs as .raw file)
+
+#create trimmed phenotype file of diagnosis columns
+vi SubsetB.sh cut -f1,2,3,3149-3456,3783-4042 ukb41483.tab  > ukb41483.subsetB.tab
+qsub -V -b y -cwd -N SubsetB -pe smp.pe 2 bash SubsetB.sh
+
+
+bb.Hsubset.1 <- read.table("ukb-data/ukb41483.subsetB.tab", header=T, stringsAsFactors=F)
+bb.Hsubset.19 <- read.table("ukb-data/CODING19COLUMNS.phenotypes.txt", header=T, stringsAsFactors=F)
+
