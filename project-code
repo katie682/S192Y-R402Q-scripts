@@ -108,8 +108,38 @@ names(all_logMAR_grouped)[5] <- "LR_mean"
 
 summary(all_logMAR_grouped)
 
-#Similar merge() and rbind() method used for logMAR for albinism, other eye problems and ethnicity
+#Similar merge() and rbind() method used for logMAR for albinism and ethnicity
 
 install.packages("haven")
 library(haven)
 write_sav(all_logMAR_grouped, "all_logMAR_grouped.sav") #.sav file required for SPSS 25
+
+## eye problems were coded to represent "yes","no","NA", "prefer not to say" etc
+#command line:
+cut -f1,85,86,87 ukb41483.tab > eye_problems.txt
+
+#R:
+eye_prob <- read.table("ukb-data/eye_problems.txt",header = T,stringsAsFactors = F)
+head(eye_prob)
+eye_prob_table <- eye_prob[,c(1,2)]
+head(eye_prob_table)
+names(eye_prob_table)[2]<- "other_eye_problems"
+
+head(DH_table)
+nrow(DH_table)
+DH_eye <- merge(x=OnlyDHidsDF,y = eye_prob_table,by = "f.eid",all.x = T)
+count(DH_eye,'other_eye_problems')
+
+head(Only809IDsDF)
+R402Q_eye <- merge(x=Only809IDsDF,y=eye_prob_table,by = "f.eid",all.x = T)
+count(R402Q_eye,'other_eye_problems')
+
+head(S192Y_DF)
+S192Y_eye <- merge(x=Only602IDsDF,y=eye_prob_table,by = "f.eid", all.x = T)
+count(S192Y_eye,'other_eye_problems')
+
+head(UKBB_nohom_df)
+nohom_eye <- merge(x=OnlyUKBBhetIDsDF,y=eye_prob_table,by = "f.eid", all.x = T)
+count(nohom_eye,'other_eye_problems')
+
+
