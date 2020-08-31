@@ -3,9 +3,8 @@
 qsub -b y -V -cwd -N plinkchr11 -pe smp.pe 2 plink --chr 11 --bed XX.bed --bim XX.bim --fam XX.fam --recode A --out recodechr11.plinkOut.raw --extract testsnps.txt
 
 #use output file recodechr11.plinkOut.raw in command line
-awk '{ if (($7 == 2) && ($8 != 2)) { print } }' recodechr11.plinkOut.raw > hom602filter.txt
-awk '{ if (($8 == 2) && ($7 != 2)) { print } }' recodechr11.plinkOut.raw > hom809filter.txt
-awk '{ if (($7 == 2) && ($8 == 2)) { print } }' recodechr11.plinkOut.raw > doublehomsfilter.txt
+awk '{ if (($7 == 2) && ($8 != 2)) { print $2} }' recodechr11.plinkOut.raw > hom602IDonly.txt
+awk '{ if (($8 == 2) && ($7 != 2)) { print $2} }' recodechr11.plinkOut.raw > hom809IDonly.txt
 awk '{ if (($7 == 2) && ($8 == 2)) { print $2} }' recodechr11.plinkOut.raw > doublehomsIIDonly.txt #file with IDs of those with dble homs
 wc -l doublehomsIIDonly.txt #will show 136 IDs
 
@@ -17,10 +16,96 @@ awk '{ if ($8 == 1) { print } }' recodechr11.plinkOut.raw > het809filter.txt #19
 awk '{ if ($1 == 2111251) { print $3931} }' ukb41483.tab #this confirms that eid = iid (ie .tab file has same anonymised IDs as .raw file)
 
 #create trimmed phenotype file of diagnosis columns
-vi SubsetB.sh cut -f1,2,3,3149-3456,3783-4042 ukb41483.tab  > ukb41483.subsetB.tab
-qsub -V -b y -cwd -N SubsetB -pe smp.pe 2 bash SubsetB.sh
+cut -f1,3149-3214,3242-3425,3783-3995 ukb41483.tab > CODING19COLUMNS.phenotypes.txt
 
+###R
 
-bb.Hsubset.1 <- read.table("ukb-data/ukb41483.subsetB.tab", header=T, stringsAsFactors=F)
+#create dataframe of phenotype columns
 bb.Hsubset.19 <- read.table("ukb-data/CODING19COLUMNS.phenotypes.txt", header=T, stringsAsFactors=F)
+
+##example uses R402Q homozygous groups - same process for all four genotype groups
+#dataframe of R402Q ids - creating uniform columns
+
+RQ.idsDF <- read.table("ukb-data/hom809IDonly.txt", header=F, stringsAsFactors = F)
+head(RQ.idsDF)
+names(RQ.idsDF)[1]<-"f.eid"
+nrow(RQ.idsDF)
+class(RQ.idsDF) #to ensure DF
+####
+phenotypes <- paste("H", 000:599, sep="")
+Colheadings <- scan("ukb-data/Columns19.txt", what="character") #Columns19.txt is a list of column headings 
+
+#merge bbHsubset.19 and RQids
+head(RQ.idsDF)
+head(bb.Hsubset.19)
+names(bb.Hsubset.19)[1]<-"f.eid"
+RQ_coding19 <- merge(x = RQ.idsDF,y = bb.Hsubset.19,by = "f.eid",all.x = T)
+head(RQ_coding19)
+nrow(RQ_coding19)
+
+##
+phenotypes <- paste("H", 000:599, sep="")
+Colheadings <- scan("ukb-data/Columns19.txt", what="character")
+
+for(thisPheno in phenotypes)  {
+  RQ_coding19[,thisPheno]  <- FALSE
+  for(thisCol in Colheadings)  {
+    searchIndex <- grep(thisPheno, RQ_coding19[ ,thisCol])  
+    RQ_ids_all_DF[searchIndex,thisPheno]  <- TRUE
+  }
+}
+
+#count phenotypes, for example: 
+length(which(RQ_ids_all_DF$H474 == TRUE))
+
+#repeat for all four genotype groups and all relevant phenotype groups
+
+###LOGMAR calculations
+#360,392,1354,1358,1366,1370 are the .tab columns for logMAR
+#filtered the logMAR scores to include only "first" and one eye at a time, for example:
+awk '{print $1,$1366 }' ukb41483.tab > logMAR.LEFT.FIRST.BB.txt
+#exclude NA values
+awk '{ if ($2 != "NA") {print } }' logMAR.LEFT.FIRST.BB.txt > logMAR.LEFT.FIRST.noNA.txt
+
+#example of R402Q homs
+Only809IDs <- read.table("ukb-data/hom809IDonly.txt", header=F, stringsAsFactors=F)
+head(Only809IDs)
+nrow(Only809IDs)
+
+LogmarLeft809 <- read.table("ukb-data/logMAR.LEFT.FIRST.noNA.txt", header=T, stringsAsFactors=F)
+head(LogmarLeft809)
+
+#making names coherent 
+names(LogmarLeft809DF)[1] <- "IID"
+head(LogmarLeft809DF)
+names(Only809IDsDF)[1] <- "IID"
+head(Only809IDsDF)
+
+LogMar_809 <- merge(x=Only809IDsDF,y=LogmarLeft809DF,by="IID",all.x=TRUE)
+head(LogMar_809)
+nrow(LogMar_809)
+names(LogMar_809)[2]<-"L_logMAR"
+
+##do the same for left and right eyes and merge to create LogMarSubset_809. Add genotype column:
+LogMarSubset_809$group <- paste("R402Q")
+
+#check for no NA values and exclude outliers
+L_R_corrected_809 <- subset(LogMarSubset_809, R_logMAR!="NA" & L_logMAR!="NA")
+nrow(L_R_corrected_809)
+head(L_R_corrected_809)
+
+L_R_809_logMAR <- subset(L_R_corrected_809, R_logMAR<1.4 & L_logMAR<1.4)
+head(L_R_809_logMAR)
+
+#do the same for S192Y homs, double homs and no homs
+all_logMAR_grouped <- rbind(L_R_809_logMAR,L_R_602_logMAR,L_R_DH_logMAR,L_R_BB_logMAR)
+#can use max() and min() functions to check outliers
+
+#adding on a column for the mean:
+all_logMAR_grouped$mean <- rowMeans(all_logMAR_grouped[,c('L_logMAR', 'R_logMAR')])
+head(all_logMAR_grouped)
+names(all_logMAR_grouped)[5] <- "LR_mean"
+
+summary(all_logMAR_grouped)
+
 
